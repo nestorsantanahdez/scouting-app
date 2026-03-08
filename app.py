@@ -1,47 +1,56 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-from sklearn.ensemble import RandomForestRegressor
+import pickle
 
-# --- CONFIGURACIÓN DE LA PÁGINA ---
-st.set_page_config(page_title="Scouting EBA -> U22", layout="centered")
-st.title("🏀 Proyector de Talento: EBA a U22")
-st.markdown("Introduce las medias de EBA para ver la proyección real en U22 usando **Random Forest**.")
+# --- CARGA DEL MODELO REAL ---
+@st.cache_resource # Para que no cargue el modelo cada vez que mueves un botón
+def cargar_cerebro():
+    with open('modelo_basket.pkl', 'rb') as f:
+        return pickle.load(f)
 
-# --- SIMULACIÓN DE DATOS Y MODELO ---
-# (Nota: En una app real, aquí cargarías tu archivo Excel 'df_model.csv')
-stats_nombres = ['Minutos', 'Puntos', 'Rebotes total', 'Asistencias', 
-                  'Recuperaciones', 'Perdidas', 'Tapones favor', 'Faltas recibidas']
+data = cargar_cerebro()
+modelo = data['modelo']
+scaler = data['scaler']
+mae_por_stat = data['mae']
+stats_nombres = data['stats']
 
-# MAE calculado previamente (puedes ajustar estos números según tus resultados)
-mae_dict = {
-    'Minutos': 4.5, 'Puntos': 2.38, 'Rebotes total': 1.5, 'Asistencias': 0.48,
-    'Recuperaciones': 0.3, 'Perdidas': 0.4, 'Tapones favor': 0.1, 'Faltas recibidas': 0.6
-}
+# --- DISEÑO DE LA WEB ---
+st.set_page_config(page_title="Scouting Pro", page_icon="🏀")
+st.title("🏀 Sistema de Proyección EBA ➔ U22")
+st.info("Predicciones basadas en Random Forest Regressor entrenado con tus datos históricos.")
 
-# --- BARRA LATERAL: ENTRADA DE DATOS ---
-st.sidebar.header("Estadísticas EBA")
-datos_usuario = []
+# --- ENTRADA DE DATOS ---
+st.sidebar.header("📊 Estadísticas EBA")
+inputs = []
 for stat in stats_nombres:
-    val = st.sidebar.number_input(f"{stat} EBA", min_value=0.0, value=10.0, step=0.1)
-    datos_usuario.append(val)
+    val = st.sidebar.number_input(f"{stat} (Media EBA)", value=10.0, step=0.1)
+    inputs.append(val)
 
-# --- BOTÓN DE CÁLCULO ---
-if st.button("Generar Informe de Proyección"):
-    # Aquí iría el modelo entrenado (rf_final.predict)
-    # Por ahora simulamos la lógica del Random Forest con tus datos cargados
+# --- PROCESAMIENTO ---
+if st.sidebar.button("CALCULAR PROYECCIÓN"):
+    X_input = np.array([inputs])
     
-    st.header("📊 Informe Proyectado U22")
+    # Aplicar escalado si el modelo original lo usaba
+    if scaler:
+        X_input = scaler.transform(X_input)
     
+    # Predicción real
+    prediccion = modelo.predict(X_input)[0]
+
+    # --- MOSTRAR RESULTADOS ---
+    st.subheader("🎯 Resultados Proyectados en U22")
     cols = st.columns(2)
+    
     for i, stat in enumerate(stats_nombres):
-        # Simulación de la predicción (Aquí conectarías tu modelo real)
-        val_pred = datos_usuario[i] * 0.8  # Ejemplo de factor de corrección
-        err = mae_dict[stat]
+        val_pred = max(0, prediccion[i])
+        error = mae_por_stat[i]
         
         with cols[i % 2]:
-            st.metric(label=f"Proyección {stat}", value=f"{val_pred:.1f}")
-            st.caption(f"Intervalo Confianza: **[{max(0, val_pred-err):.1f} - {val_pred+err:.1f}]**")
-            st.divider()
+            st.metric(label=stat, value=f"{val_pred:.2f}")
+            st.write(f"Confianza: **[{max(0, val_pred-error):.1f} a {val_pred+error:.1f}]**")
+            st.progress(min(1.0, val_pred / (val_pred + error + 0.1))) # Barra visual de progreso
 
-    st.success("Cálculo realizado mediante Random Forest Regressor (200 árboles).")
+    st.success("Informe generado con éxito.")
+else:
+    st.warning("Introduce los datos en la barra lateral y pulsa el botón para empezar.")
