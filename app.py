@@ -10,7 +10,7 @@ st.set_page_config(page_title="Scouting Pro 🏀", layout="wide")
 @st.cache_resource
 def cargar_recursos():
     try:
-        with open('modelo_basket.pkl', 'rb') as f:
+        with open('modelo_final_8_stats.pkl', 'rb') as f:
             return pickle.load(f)
     except FileNotFoundError:
         return None
